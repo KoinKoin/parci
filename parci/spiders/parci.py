@@ -49,59 +49,59 @@ class parciScrap(CrawlSpider):
 
     def start_requests(self):
         try:
-            self.tagdate
-        except:
-            self.tagdate = datetime.datetime.now().date()
-            # self.tagdate -= datetime.timedelta(days=1)
-            self.tagdate = str(self.tagdate.strftime('%d/%m/%Y'))
-        try:
-            self.i
-        except:
-            self.i = 3
-        
-        try:
             self.reu
-            url_reunion = 'http://parci.free.fr/include/prixListe.php?idReunion=' + self.reu
-            yield scrapy.Request(
-                url_reunion,
-                meta={
-                    'jour': '01/01/2000',
-                    'idReunion': self.reu
-                },
-                callback=self.parse_reunion)
-            raise SystemExit(0)
         except:
-            pass
+            self.reu = -1
         try:
             self.prix
-            url_course = 'http://parci.free.fr/include/prixId.php?id=' + self.prix
-            yield scrapy.Request(
-                url_course,
-                meta={
-                    'jour': '01/01/2000',
-                    'idPrix': self.prix
-                },
-                callback=self.parse_course)
-            raise SystemExit(0)
         except:
-            pass
+            self.prix = -1
         
+        urls=[]
+        meta={}
+        if self.reu != -1:
+            urls = ['http://parci.free.fr/include/prixListe.php?idReunion=' + self.reu]
+            appel = self.parse_reunion
+            meta['idReunion'] = self.reu
+        elif self.prix != -1:
+            urls = ['http://parci.free.fr/include/prixId.php?id=' + self.prix]
+            appel = self.parse_course
+            meta['idPrix'] = self.prix
+        else:
+            try:
+                self.tagdate
+            except:
+                self.tagdate = datetime.datetime.now().date()
+                # self.tagdate -= datetime.timedelta(days=1)
+                self.tagdate = str(self.tagdate.strftime('%d/%m/%Y'))
+            try:
+                self.i
+            except:
+                self.i = 3
+            
+            self.logger.info('tagdate==========> %s', self.tagdate)
+            self.date = datetime.datetime.strptime(self.tagdate, '%d/%m/%Y')
+            self.logger.info('date==========> %s', self.date.strftime('%d/%m/%Y'))
+            
+            for x in range(1, int(self.i) + 1):
+                urls.append('http://parci.free.fr/include/reunions.php?date=' + self.date.strftime('%d/%m/%Y'))
+                self.date -= datetime.timedelta(days=1)
+            appel = self.parse_programme
         # base = datetime.datetime.today() - datetime.timedelta(days=1)
         # date_list = [(base - datetime.timedelta(days=x)).strftime('%d/%m/%Y')
         #      for x in range(2414)]
-        self.logger.info('tagdate==========> %s', self.tagdate)
-        self.date = datetime.datetime.strptime(self.tagdate, '%d/%m/%Y')
-        self.logger.info('date==========> %s', self.date.strftime('%d/%m/%Y'))
         
         # for date in date_list:
-        for x in range(1, int(self.i) + 1):
+        for url in urls:
+            if "date=" in url:
+                meta['jour'] = url.split('=')[1]
+            else:
+                meta['jour'] = '01/01/2000'
             # print('http://parci.free.fr/include/reunions.php?date=' + date)
             yield scrapy.Request(
-                'http://parci.free.fr/include/reunions.php?date=' + self.date.strftime('%d/%m/%Y'),
-                meta={
-                    'jour': self.date.strftime('%d/%m/%Y'),
-                },
-                callback=self.parse_programme)
+                url,
+                meta=meta,
+                callback=appel)
 
             self.date -= datetime.timedelta(days=1)
 
@@ -123,10 +123,7 @@ class parciScrap(CrawlSpider):
                     'idReunion': result['idReunion']
                 },
                 callback=self.parse_reunion)
-            # time.sleep(1)
-            # with open('data/%s-%s.json' % (date.replace('/', ''), result['idReunion']), 'w', encoding='utf-8') as f:
-            #     json_reunion_res = json.loads(r_reunion.text)
-            #     json.dump(json_reunion_res, f)
+
 
     def parse_reunion(self, response):
         json_reunion_res = json.loads(response.text)
@@ -152,7 +149,7 @@ class parciScrap(CrawlSpider):
         json_course_res = json.loads(response.text)
         date = response.meta['jour']
         idPrix = response.meta['idPrix']
-        # print(json_reunion_res)
+        # print(json_course_res)
         filename = 'data/%s/courses/%s.json' % (date.split('/')[2], idPrix)
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, 'w', encoding='utf-8') as f:
